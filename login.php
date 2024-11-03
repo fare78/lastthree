@@ -1,8 +1,16 @@
 <?php
 session_start();
 include 'db.php'; // Include your database connection file
-
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 $error = '';
+
+$json = file_get_contents(__DIR__ . '/config/client_secret.json'); // Update with the path to your JSON file
+$data = json_decode($json, true);
+$redirect_url = $data['web']['redirect_uris'];
+// Extract the client_id
+$client_id = $data['web']['client_id'];
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['login'])) {
@@ -10,25 +18,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $email = $_POST['email'];
         $password = $_POST['password'];
 
-        $stmt = $conn->prepare("SELECT id, password, is_admin FROM users WHERE email = ?"); // Include is_admin in the SELECT query
+        $stmt = $conn->prepare("SELECT id, password, is_admin FROM users WHERE email = ?");
         $stmt->bind_param("s", $email);
         $stmt->execute();
         $stmt->store_result();
 
         if ($stmt->num_rows > 0) {
-            $stmt->bind_result($id, $hashed_password, $is_admin); // Fetch is_admin
+            $stmt->bind_result($id, $hashed_password, $is_admin);
             $stmt->fetch();
 
             if (password_verify($password, $hashed_password)) {
-                // After successful login
                 $_SESSION['user_id'] = $id;
-                $_SESSION['is_admin'] = $is_admin; // Store is_admin in session
+                $_SESSION['is_admin'] = $is_admin;
 
-                // Check if the user is admin and redirect accordingly
                 if ($is_admin) {
-                    header("Location: admin.php"); // Redirect to admin page
+                    header("Location: admin.php");
                 } else {
-                    header("Location: upload.php"); // Redirect to upload page for regular users
+                    header("Location: upload.php");
                 }
                 exit();
             } else {
@@ -42,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 }
 ?>
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -49,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login</title>
     <style>
+    
         body {
             font-family: Arial, sans-serif;
             display: flex;
@@ -101,10 +109,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             color: red;
             text-align: center;
         }
+    
     </style>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-
     <div class="auth-container">
         <h2>Login</h2>
         <form method="POST" action="">
@@ -116,7 +125,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <p class='error'><?= $error ?></p>
             <?php endif; ?>
         </form>
+
+        <!-- Google Sign-In Button -->
+        <p>Sign in with Google</p>
+        <div id="g_id_onload" data-client_id="<?php echo $client_id; ?>"
+            data-login_uri="<?php echo $redirect_url; ?>" data-callback="handleCredentialResponse"
+            data-auto_prompt="false">
+        </div>
+        <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="sign_in_with"
+            data-shape="rectangular" data-logo_alignment="left">
+        </div>
     </div>
 
+    <script>
+        function handleCredentialResponse(response) {
+            var id_token = response.credential;
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', 'google_login.php', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.onload = function () {
+                try {
+                    const res = JSON.parse(xhr.responseText);
+                    if (res.status === "success") {
+                        window.location.href = res.redirect;
+                    } else {
+                        console.error("Error: ", res.error);
+                        alert(res.error);
+                    }
+                } catch (e) {
+                    console.error("Failed to parse response", e);
+                }
+            };
+            xhr.send('id_token=' + id_token);
+        }
+    </script>
 </body>
+
 </html>

@@ -1,9 +1,12 @@
 <?php
 session_start();
 include 'db.php'; // Include your database connection file
-
 $error = '';
-
+$json = file_get_contents(__DIR__ . '/config/client_secret.json'); // Update with the path to your JSON file
+$data = json_decode($json, true);
+$redirect_url = $data['web']['redirect_uris'];
+// Extract the client_id
+$client_id = $data['web']['client_id'];
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['signup'])) {
         // Sign-up logic
@@ -102,6 +105,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             text-align: center;
         }
     </style>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    
 </head>
 
 <body>
@@ -120,7 +125,55 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <p class='error'><?= $error ?></p>
             <?php endif; ?>
         </form>
+        <div id="g_id_onload" data-client_id="<?php echo $client_id; ?>"
+            data-login_uri="<?php echo $redirect_url; ?>" data-callback="handleCredentialResponse"
+            data-auto_prompt="false">
+        </div>
+        <p>Sign Up with Google</p>
+        <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="sign_in_with"
+            data-shape="rectangular" data-logo_alignment="left">
+        </div>
+        
     </div>
+    
+   
+
+<script>
+    // Handle Google Sign-In response
+    function handleCredentialResponse(response) {
+        
+        
+        // Send ID token to your server
+        fetch("google_login.php", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: `id_token=${response.credential}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === "success") {
+                // Redirect based on the server response
+                window.location.href = data.redirect;
+            } else {
+                console.error("Error:", data.error);
+                alert("Google Sign-In failed. Please try again.");
+            }
+        });
+    }
+
+    // Initialize the button
+    window.onload = function () {
+        google.accounts.id.initialize({
+            client_id: "<?php echo $client_id; ?>",
+            callback: handleCredentialResponse
+        });
+        google.accounts.id.renderButton(
+            document.querySelector(".g_id_signin"),
+            { theme: "outline", size: "large" } // Customize button style here
+        );
+    };
+</script>
+
 
 </body>
 
